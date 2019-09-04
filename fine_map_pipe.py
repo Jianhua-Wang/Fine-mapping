@@ -1,10 +1,11 @@
 #! /usr/bin/env python3
+# coding: utf-8
 
 import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from subprocess import call,check_output
-import os,sys,shutil
+import os,sys,shutil,argparse
 
 def print_logo():
     logo = '''
@@ -20,23 +21,17 @@ def print_logo():
     '''
     print(logo)
 
-# def parseArguments():
-#     parser = argparse.ArgumentParser(usage="conver genome build of txt or csv file, require pyliftover",description="python liftover.py -c 0 -p 1 test.txt test_lifted.txt",)
-#     parser.add_argument('input', type=str, help='input unlifted file'),
-#     parser.add_argument('output', type=str, help='output lifted file'),
-#     parser.add_argument('-c','--chr', type=int, help='colunm positon of chromosome (0-based), default=0',default=0,metavar=''),
-#     parser.add_argument('-p','--pos', type=int, help='colunm positon of base pair (0-based), default=1',default=1,metavar=''),
-#     parser.add_argument('-o','--old', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of input file, choose from [hg17,hg18,hg19,hg38], default=hg19',default='hg19',metavar='')
-#     parser.add_argument('-n','--new', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of output file, choose from [hg17,hg18,hg19,hg38], default=hg38',default='hg38',metavar='')
-#     parser.add_argument('-s','--sep', type=str, choices=['table','comma','space'], help='separator of input file, choose from [table,comma,space], default=table',default='table',metavar='')
-#     parser.add_argument('-t','--thread', type=int, help='threads you want to run, default=20',default=20,metavar='')
-#     parser.add_argument('--withchr', action='store_true', help='exist when chromosome of input starts with chr, and output starts with chr, either')
-#     parser.add_argument('--gzip', action='store_true', help='exist when input is .gz file, but output text file, still')
-#     parser.add_argument('--headless', action='store_true', help='exist when input is headless file, and output headless file, either')
-
-#     args = parser.parse_args()
-#     return args
-# args = parseArguments()
+def parseArguments():
+    parser = argparse.ArgumentParser(usage="Finemap using three tools, output variants in total credible sets",description="python fine_map_pipe.py -s 120575 SUM_STAT",)
+    parser.add_argument('input', type=str, help='input summary statistics'),
+    parser.add_argument('output', type=str, help='directory of output file, default:working directory',default='./'),
+    parser.add_argument('-p','--pop', type=str, choices=['EUR','EAS','SAS','AMR','AFR'], help='population of input data,[EUR,EAS,SAS,AMR,AFR], default=EUR',default='EUR',metavar=''),
+    parser.add_argument('-n','--maxcausal', type=int, help='the maximum number of allowed causal SNPs, default=1',default=1,metavar=''),
+    parser.add_argument('-s','--samplesize', type=int, help='sample size of input data',metavar='')
+    parser.add_argument('-c','--cred', type=float, help='the cutoff of credible set, default=0.95',default=0.95,metavar='')
+    parser.add_argument('-t','--thread', type=int, help='number of threads, default=10',default=10,metavar='')
+    args = parser.parse_args()
+    return args
 
 def extract_overlap_and_cal_ld(pop,chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}'.format(out_dir,prefix,chr_id,start,stop)
@@ -77,16 +72,16 @@ def run_block(chr_id, start, stop):
 
     # PAINTOR
 	call('echo "{}" > {}.input'.format(prefix_name,out_prefix),shell=True)
-	call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True, stdout=FNULL)
+	call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True)
 
     # CAVIARBF
-	n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True, stdout=FNULL).decode().split()[0]
-	call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True, stdout=FNULL)
-	call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True, stdout=FNULL)
+	n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True).decode().split()[0]
+	call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True)
+	call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True)
 
     # FINEMAP
 	call('echo "z;ld;snp;config;cred;log;n_samples\n{}.z;{}.ld;{}.snp;{}.config;{}.cred;{}.log;{}" > {}.master'.format(out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,sample_size,out_prefix),shell=True)
-	call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True, stdout=FNULL)
+	call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True)
 
 def merge_results(chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}.processed'.format(out_dir,prefix,chr_id,start,stop)
@@ -134,7 +129,7 @@ def get_credible_set(meta_id):
         ]
         df = pd.read_csv(f'./{meta_id}/{meta_id}_{chr_id}_{start}_{stop}.causal.txt',sep='\t',names=names)
 
-        credible_cutoff = 0.95
+        credible_cutoff = args.cred
         maxpostprob_idx = pd.Series()
         fm_tool_cred = pd.Series(index=['PAINTOR', 'CAVIARBF', 'FINEMAP'],data=[[], [], []])
         fm_tool_label = pd.Series(index=['PAINTOR', 'CAVIARBF', 'FINEMAP'],data=[1, 2, 4])
@@ -190,28 +185,30 @@ def get_credible_set(meta_id):
     total_credible = pd.concat(total_credible.values)
 #     total_credible['rsID'] = pd.to_numeric(total_credible['rsID'],
 #                                            errors='coerce')
-    total_credible.dropna().to_csv(f'./{meta_id}_total_credible_set.txt',sep='\t',index=False)
+    total_credible.dropna().to_csv(f'{args.output}/{meta_id}_total_credible_set.txt',sep='\t',index=False)
     # new_sig_blocks.to_csv(f'./{meta_id}/{meta_id}_new_significant_blocks.txt',sep='\t',index=False)
 #     print(meta_id)
 
 if __name__ == "__main__":
     print_logo()
-        
-    # read blocks file
+    args = parseArguments()
+    
     paintor = './bin/PAINTOR_V3.0-3.0/PAINTOR'
     caviarbf = './bin/Wenan-caviarbf-7e428645be5e/caviarbf'
     model_search = './bin/Wenan-caviarbf-7e428645be5e/model_search'
     finemap = './bin/finemap_v1.3.1_x86_64/finemap_v1.3.1_x86_64'
+
     blocks_file = './ref/blocks.txt'
     reference_dir = './ref/ld/txt'
+
     blocks = pd.read_csv(blocks_file, sep='\t')
-    threads = 10
-    max_causal = sys.argv[3]
-    sample_size = sys.argv[4]
+    threads = args.thread
+    max_causal = args.maxcausal
+    sample_size = args.samplesize
 
     # read input file
-    input_file = sys.argv[1]
-    pop = sys.argv[2]
+    input_file = args.input
+    pop = args.pop
     pwd = os.getcwd()
     prefix = input_file.split('/')[-1].split('.')[0]
     out_dir = '{}/{}'.format(pwd,prefix)
@@ -280,8 +277,8 @@ if __name__ == "__main__":
     #         pass
     #     else:
     #         os.remove(out_dir +'/'+ file)
-    # significant_blocks.to_csv('{}/{}/{}_significant_blocks.txt'.format(pwd,prefix,prefix),sep='\t',index=False)
 
+    significant_blocks.to_csv('{}/{}/{}_significant_blocks.txt'.format(pwd,prefix,prefix),sep='\t',index=False)
     get_credible_set(prefix)
     shutil.rmtree(out_dir)
 
