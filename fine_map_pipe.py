@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from subprocess import call,check_output
-import os,sys,shutil,argparse
+import os,sys,shutil,argparse,subprocess
 
 def print_logo():
     logo = '''
@@ -22,7 +22,7 @@ def print_logo():
     print(logo)
 
 def parseArguments():
-    parser = argparse.ArgumentParser(usage="Finemap using three tools, output variants in total credible sets",description="python fine_map_pipe.py -s 120575 SUM_STAT",)
+    parser = argparse.ArgumentParser(usage="Finemap using three tools, output variants in total credible sets",description="python fine_map_pipe.py -s 120575 SUM_STAT ./",)
     parser.add_argument('input', type=str, help='input summary statistics'),
     parser.add_argument('output', type=str, help='directory of output file, default:working directory',default='./'),
     parser.add_argument('-p','--pop', type=str, choices=['EUR','EAS','SAS','AMR','AFR'], help='population of input data,[EUR,EAS,SAS,AMR,AFR], default=EUR',default='EUR',metavar=''),
@@ -67,21 +67,21 @@ def extract_overlap_and_cal_ld(pop,chr_id, start, stop):
 	np.savetxt('{}.processed.ld'.format(out_prefix), np.corrcoef(processed.iloc[:,18:-2].values), fmt='%1.4e')
 
 def run_block(chr_id, start, stop):
-	out_prefix = '{}/{}_{}_{}_{}.processed'.format(out_dir,prefix,chr_id,start,stop)
-	prefix_name = '{}_{}_{}_{}.processed'.format(prefix,chr_id,start,stop)
-
+    out_prefix = '{}/{}_{}_{}_{}.processed'.format(out_dir,prefix,chr_id,start,stop)
+    prefix_name = '{}_{}_{}_{}.processed'.format(prefix,chr_id,start,stop)
+    FNULL = open(os.devnull, 'w')
     # PAINTOR
-	call('echo "{}" > {}.input'.format(prefix_name,out_prefix),shell=True)
-	call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True)
+    call('echo "{}" > {}.input'.format(prefix_name,out_prefix),shell=True)
+    call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
 
     # CAVIARBF
-	n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True).decode().split()[0]
-	call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True)
-	call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True)
+    n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True).decode().split()[0]
+    call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
+    call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
 
     # FINEMAP
-	call('echo "z;ld;snp;config;cred;log;n_samples\n{}.z;{}.ld;{}.snp;{}.config;{}.cred;{}.log;{}" > {}.master'.format(out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,sample_size,out_prefix),shell=True)
-	call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True)
+    call('echo "z;ld;snp;config;cred;log;n_samples\n{}.z;{}.ld;{}.snp;{}.config;{}.cred;{}.log;{}" > {}.master'.format(out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,sample_size,out_prefix),shell=True)
+    call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
 
 def merge_results(chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}.processed'.format(out_dir,prefix,chr_id,start,stop)
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     get_credible_set(prefix)
     shutil.rmtree(out_dir)
 
-    # # test
+    # # debug
     # chr_id, start, stop = significant_blocks.iloc[0].values
     # extract_overlap_and_cal_ld(pop,chr_id, start, stop)
     # run_block(chr_id, start, stop)
