@@ -4,15 +4,15 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from subprocess import call,check_output
-import os,sys
+import os,sys,shutil
 
 def print_logo():
     logo = '''
 ==================================================================
      \033[1;33m/\\\033[0m
-    \033[1;33m/__\\\033[0m\033[1;31m\\\033[0m            This is a python script for statistical fine-mapping
-   \033[1;33m/\033[0m  \033[1;31m---\\\033[0m           Author: Jianhua Wang
-  \033[1;33m/\\\033[0m      \033[1;31m\\\033[0m          Date:   04-09-2019
+    \033[1;33m/__\\\033[0m\033[1;31m\\\033[0m         This is a pipeline for statistical fine-mapping
+   \033[1;33m/\033[0m  \033[1;31m---\\\033[0m        Author: Jianhua Wang
+  \033[1;33m/\\\033[0m      \033[1;31m\\\033[0m       Date:   04-09-2019
  \033[1;33m/\033[0m\033[1;32m/\\\033[0m\033[1;33m\\\033[0m     \033[1;31m/\\\033[0m
  \033[1;32m/  \   /\033[0m\033[1;31m/__\\\033[0m
 \033[1;32m`----`-----\033[0m
@@ -20,23 +20,23 @@ def print_logo():
     '''
     print(logo)
 
-def parseArguments():
-    parser = argparse.ArgumentParser(usage="conver genome build of txt or csv file, require pyliftover",description="python liftover.py -c 0 -p 1 test.txt test_lifted.txt",)
-    parser.add_argument('input', type=str, help='input unlifted file'),
-    parser.add_argument('output', type=str, help='output lifted file'),
-    parser.add_argument('-c','--chr', type=int, help='colunm positon of chromosome (0-based), default=0',default=0,metavar=''),
-    parser.add_argument('-p','--pos', type=int, help='colunm positon of base pair (0-based), default=1',default=1,metavar=''),
-    parser.add_argument('-o','--old', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of input file, choose from [hg17,hg18,hg19,hg38], default=hg19',default='hg19',metavar='')
-    parser.add_argument('-n','--new', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of output file, choose from [hg17,hg18,hg19,hg38], default=hg38',default='hg38',metavar='')
-    parser.add_argument('-s','--sep', type=str, choices=['table','comma','space'], help='separator of input file, choose from [table,comma,space], default=table',default='table',metavar='')
-    parser.add_argument('-t','--thread', type=int, help='threads you want to run, default=20',default=20,metavar='')
-    parser.add_argument('--withchr', action='store_true', help='exist when chromosome of input starts with chr, and output starts with chr, either')
-    parser.add_argument('--gzip', action='store_true', help='exist when input is .gz file, but output text file, still')
-    parser.add_argument('--headless', action='store_true', help='exist when input is headless file, and output headless file, either')
+# def parseArguments():
+#     parser = argparse.ArgumentParser(usage="conver genome build of txt or csv file, require pyliftover",description="python liftover.py -c 0 -p 1 test.txt test_lifted.txt",)
+#     parser.add_argument('input', type=str, help='input unlifted file'),
+#     parser.add_argument('output', type=str, help='output lifted file'),
+#     parser.add_argument('-c','--chr', type=int, help='colunm positon of chromosome (0-based), default=0',default=0,metavar=''),
+#     parser.add_argument('-p','--pos', type=int, help='colunm positon of base pair (0-based), default=1',default=1,metavar=''),
+#     parser.add_argument('-o','--old', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of input file, choose from [hg17,hg18,hg19,hg38], default=hg19',default='hg19',metavar='')
+#     parser.add_argument('-n','--new', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of output file, choose from [hg17,hg18,hg19,hg38], default=hg38',default='hg38',metavar='')
+#     parser.add_argument('-s','--sep', type=str, choices=['table','comma','space'], help='separator of input file, choose from [table,comma,space], default=table',default='table',metavar='')
+#     parser.add_argument('-t','--thread', type=int, help='threads you want to run, default=20',default=20,metavar='')
+#     parser.add_argument('--withchr', action='store_true', help='exist when chromosome of input starts with chr, and output starts with chr, either')
+#     parser.add_argument('--gzip', action='store_true', help='exist when input is .gz file, but output text file, still')
+#     parser.add_argument('--headless', action='store_true', help='exist when input is headless file, and output headless file, either')
 
-    args = parser.parse_args()
-    return args
-args = parseArguments()
+#     args = parser.parse_args()
+#     return args
+# args = parseArguments()
 
 def extract_overlap_and_cal_ld(pop,chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}'.format(out_dir,prefix,chr_id,start,stop)
@@ -77,16 +77,16 @@ def run_block(chr_id, start, stop):
 
     # PAINTOR
 	call('echo "{}" > {}.input'.format(prefix_name,out_prefix),shell=True)
-	call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True)
+	call('{} -input {}.input -out {} -Zhead Zscore -LDname ld -enumerate {} -in {}'.format(paintor,out_prefix,out_dir,max_causal,out_dir),shell=True, stdout=FNULL)
 
     # CAVIARBF
-	n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True).decode().split()[0]
-	call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True)
-	call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True)
+	n_variants = check_output('wc -l {}.caviarbf'.format(out_prefix),shell=True, stdout=FNULL).decode().split()[0]
+	call('{} -z {}.caviarbf -r {}.ld -t 0 -a 0.1281429 -n {} -c {} -o {}.caviarbf.out'.format(caviarbf,out_prefix,out_prefix,sample_size,max_causal,out_prefix),shell=True, stdout=FNULL)
+	call('{} -i {}.caviarbf.out -m {} -p 0 -o {}.prior0'.format(model_search,out_prefix,n_variants,out_prefix),shell=True, stdout=FNULL)
 
     # FINEMAP
 	call('echo "z;ld;snp;config;cred;log;n_samples\n{}.z;{}.ld;{}.snp;{}.config;{}.cred;{}.log;{}" > {}.master'.format(out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,out_prefix,sample_size,out_prefix),shell=True)
-	call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True)
+	call('{} --sss --in-files {}.master --n-causal-snps {}'.format(finemap,out_prefix,max_causal),shell=True, stdout=FNULL)
 
 def merge_results(chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}.processed'.format(out_dir,prefix,chr_id,start,stop)
@@ -116,7 +116,7 @@ def merge_results(chr_id, start, stop):
 
 def get_credible_set(meta_id):
     sig_blocks = pd.read_csv(f'./{meta_id}/{meta_id}_significant_blocks.txt',sep='\t')
-    block = pd.read_csv('../ref/blocks.txt',sep='\t')
+    block = pd.read_csv('./ref/blocks.txt',sep='\t')
     new_sig_blocks = pd.DataFrame(columns=[
         'chr', 'start', 'stop', 'count', 'missing', 'pa_n',
         'pa_p_min', 'pa_p_median', 'pa_pp_mean', 'pa_pp_median', 'ca_n',
@@ -190,94 +190,103 @@ def get_credible_set(meta_id):
     total_credible = pd.concat(total_credible.values)
 #     total_credible['rsID'] = pd.to_numeric(total_credible['rsID'],
 #                                            errors='coerce')
-    total_credible.dropna().to_csv(f'./{meta_id}/{meta_id}_total_credible_set.txt',sep='\t',index=False)
+    total_credible.dropna().to_csv(f'./{meta_id}_total_credible_set.txt',sep='\t',index=False)
     # new_sig_blocks.to_csv(f'./{meta_id}/{meta_id}_new_significant_blocks.txt',sep='\t',index=False)
 #     print(meta_id)
 
-# read blocks file
-paintor = './bin/PAINTOR_V3.0-3.0/PAINTOR'
-caviarbf = './bin/Wenan-caviarbf-7e428645be5e/caviarbf'
-model_search = './bin/Wenan-caviarbf-7e428645be5e/model_search'
-finemap = './bin/finemap_v1.3.1_x86_64/finemap_v1.3.1_x86_64'
-blocks_file = './ref/blocks.txt'
-reference_dir = './ld/txt'
-blocks = pd.read_csv(blocks_file, sep='\t')
-threads = 10
-max_causal = sys.argv[3]
-sample_size = sys.argv[4]
+if __name__ == "__main__":
+    print_logo()
+        
+    # read blocks file
+    paintor = './bin/PAINTOR_V3.0-3.0/PAINTOR'
+    caviarbf = './bin/Wenan-caviarbf-7e428645be5e/caviarbf'
+    model_search = './bin/Wenan-caviarbf-7e428645be5e/model_search'
+    finemap = './bin/finemap_v1.3.1_x86_64/finemap_v1.3.1_x86_64'
+    blocks_file = './ref/blocks.txt'
+    reference_dir = './ref/ld/txt'
+    blocks = pd.read_csv(blocks_file, sep='\t')
+    threads = 10
+    max_causal = sys.argv[3]
+    sample_size = sys.argv[4]
 
-# read input file
-input_file = sys.argv[1]
-pop = sys.argv[2]
-pwd = os.getcwd()
-prefix = input_file.split('/')[-1].split('.')[0]
-out_dir = '{}/{}'.format(pwd,prefix)
-if not os.path.exists(out_dir):
-	os.mkdir(out_dir)
-print('loading input file')
-df = pd.read_csv(input_file, sep='\t')
-df = df.dropna(subset=['CHR','BP','EA','NEA','BETA','SE','P','Zscore'])
-if pd.isnull(df.iloc[0,3]):
-	pass
-else:
-	df = df[(df['MAF']>0) & (df['MAF']<=0.5)]
-df['index'] = df.index
-df = df[df['P']>0]
-significant_df = df[df['P']<=5e-8]
+    # read input file
+    input_file = sys.argv[1]
+    pop = sys.argv[2]
+    pwd = os.getcwd()
+    prefix = input_file.split('/')[-1].split('.')[0]
+    out_dir = '{}/{}'.format(pwd,prefix)
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    print('loading input file')
+    df = pd.read_csv(input_file, sep='\t')
+    df = df.dropna(subset=['CHR','BP','EA','NEA','BETA','SE','P','Zscore'])
+    if pd.isnull(df.iloc[0,3]):
+        pass
+    else:
+        df = df[(df['MAF']>0) & (df['MAF']<=0.5)]
+    df['index'] = df.index
+    df = df[df['P']>0]
+    significant_df = df[df['P']<=5e-8]
 
-if len(significant_df) == 0:
-	significant_df = df[df['P'].idxmin():df['P'].idxmin()+1]
+    if len(significant_df) == 0:
+        significant_df = df[df['P'].idxmin():df['P'].idxmin()+1]
 
-# split files
-print('split files')
-significant_blocks = []
-for chr_id in range(1,23):
-    df_chr = df[df['CHR']==chr_id]
-    significant_chr = significant_df[significant_df['CHR']==chr_id]
-    block_chr = blocks[blocks['chr']==chr_id]
-    for significant_bp in significant_chr['BP']:
-        for i in block_chr.index:
-            if block_chr.loc[i,'start']<=significant_bp<=block_chr.loc[i,'stop']:
-                if i not in significant_blocks:
-                    significant_blocks.append(i)
-                    start,stop = block_chr.loc[i,'start'],block_chr.loc[i,'stop']
-                    df_chr[(df_chr['BP']>=start) & (df_chr['BP']<=stop)].to_csv('{}/{}_{}_{}_{}.txt'.format(out_dir,prefix,chr_id,start,stop), sep='\t',index=False)
-significant_blocks = blocks.loc[significant_blocks]
+    # split files
+    print('split files')
+    significant_blocks = []
+    for chr_id in range(1,23):
+        df_chr = df[df['CHR']==chr_id]
+        significant_chr = significant_df[significant_df['CHR']==chr_id]
+        block_chr = blocks[blocks['chr']==chr_id]
+        for significant_bp in significant_chr['BP']:
+            for i in block_chr.index:
+                if block_chr.loc[i,'start']<=significant_bp<=block_chr.loc[i,'stop']:
+                    if i not in significant_blocks:
+                        significant_blocks.append(i)
+                        start,stop = block_chr.loc[i,'start'],block_chr.loc[i,'stop']
+                        df_chr[(df_chr['BP']>=start) & (df_chr['BP']<=stop)].to_csv('{}/{}_{}_{}_{}.txt'.format(out_dir,prefix,chr_id,start,stop), sep='\t',index=False)
+    significant_blocks = blocks.loc[significant_blocks]
 
-# prepare input files of finemapping tools
-print('prepare input files of finemapping tools')
-p = Pool(threads)
-for i in significant_blocks.index:
-	chr_id, start, stop = significant_blocks.loc[i].values
-	p.apply_async(extract_overlap_and_cal_ld,(pop,chr_id, start, stop))
-p.close()
-p.join()
+    # prepare input files of finemapping tools
+    print('prepare input files of finemapping tools')
+    p = Pool(threads)
+    for i in significant_blocks.index:
+        chr_id, start, stop = significant_blocks.loc[i].values
+        p.apply_async(extract_overlap_and_cal_ld,(pop,chr_id, start, stop))
+    p.close()
+    p.join()
 
-# run finemapping tools
-print('run finemapping tools')
-p = Pool(threads)
-for i in significant_blocks.index:
-	chr_id, start, stop = significant_blocks.loc[i].values
-	p.apply_async(run_block,(chr_id, start, stop))
-p.close()
-p.join()
+    # run finemapping tools
+    print('run finemapping tools')
+    p = Pool(threads)
+    for i in significant_blocks.index:
+        chr_id, start, stop = significant_blocks.loc[i].values
+        p.apply_async(run_block,(chr_id, start, stop))
+    p.close()
+    p.join()
 
-# gather results from three tools
-print('gather results')
-p = Pool(threads)
-for i in significant_blocks.index:
-	chr_id, start, stop = significant_blocks.loc[i].values
-	p.apply_async(merge_results,(chr_id, start, stop))
-p.close()
-p.join()
+    # gather results from three tools
+    print('gather results')
+    p = Pool(threads)
+    for i in significant_blocks.index:
+        chr_id, start, stop = significant_blocks.loc[i].values
+        p.apply_async(merge_results,(chr_id, start, stop))
+    p.close()
+    p.join()
 
-# remove intermediate files
-for file in os.listdir(out_dir):
-	if file.endswith('.causal.txt'):
-		pass
-	else:
-		os.remove(out_dir +'/'+ file)
-significant_blocks.to_csv('{}/{}/{}_significant_blocks.txt'.format(pwd,prefix,prefix),sep='\t',index=False)
-# call('rm -rf {}'.format(out_dir),shell=True)
+    # remove intermediate files
+    # for file in os.listdir(out_dir):
+    #     if file.endswith('.causal.txt'):
+    #         pass
+    #     else:
+    #         os.remove(out_dir +'/'+ file)
+    # significant_blocks.to_csv('{}/{}/{}_significant_blocks.txt'.format(pwd,prefix,prefix),sep='\t',index=False)
 
-get_credible_set(file_name)
+    get_credible_set(prefix)
+    shutil.rmtree(out_dir)
+
+    # # test
+    # chr_id, start, stop = significant_blocks.iloc[0].values
+    # extract_overlap_and_cal_ld(pop,chr_id, start, stop)
+    # run_block(chr_id, start, stop)
+    # merge_results(chr_id, start, stop)
