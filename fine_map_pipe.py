@@ -191,16 +191,16 @@ def get_credible_set(meta_id):
 #     total_credible['rsID'] = pd.to_numeric(total_credible['rsID'],
 #                                            errors='coerce')
     total_credible.dropna().to_csv(f'./{meta_id}/{meta_id}_total_credible_set.txt',sep='\t',index=False)
-    new_sig_blocks.to_csv(f'./{meta_id}/{meta_id}_new_significant_blocks.txt',sep='\t',index=False)
+    # new_sig_blocks.to_csv(f'./{meta_id}/{meta_id}_new_significant_blocks.txt',sep='\t',index=False)
 #     print(meta_id)
 
 # read blocks file
-paintor = '/f/jianhua/software/PAINTOR_V3.0/PAINTOR'
-caviarbf = '/f/jianhua/software/caviarbf/caviarbf'
-model_search = '/f/jianhua/software/caviarbf/model_search'
-finemap = '/f/jianhua/software/finemap_v1.3.1_x86_64/finemap_v1.3.1_x86_64'
-blocks_file = '/f/jianhua/causal_db/ref/blocks.txt'
-reference_dir = '/f/jianhua/causal_db/ref/ld/txt'
+paintor = './bin/PAINTOR_V3.0-3.0/PAINTOR'
+caviarbf = './bin/Wenan-caviarbf-7e428645be5e/caviarbf'
+model_search = './bin/Wenan-caviarbf-7e428645be5e/model_search'
+finemap = './bin/finemap_v1.3.1_x86_64/finemap_v1.3.1_x86_64'
+blocks_file = './ref/blocks.txt'
+reference_dir = './ld/txt'
 blocks = pd.read_csv(blocks_file, sep='\t')
 threads = 10
 max_causal = sys.argv[3]
@@ -280,3 +280,4 @@ for file in os.listdir(out_dir):
 significant_blocks.to_csv('{}/{}/{}_significant_blocks.txt'.format(pwd,prefix,prefix),sep='\t',index=False)
 # call('rm -rf {}'.format(out_dir),shell=True)
 
+get_credible_set(file_name)
