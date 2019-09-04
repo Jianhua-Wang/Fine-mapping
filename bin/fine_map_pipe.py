@@ -6,6 +6,38 @@ from multiprocessing import Pool
 from subprocess import call,check_output
 import os,sys
 
+def print_logo():
+    logo = '''
+==================================================================
+     \033[1;33m/\\\033[0m
+    \033[1;33m/__\\\033[0m\033[1;31m\\\033[0m            This is a python script for statistical fine-mapping
+   \033[1;33m/\033[0m  \033[1;31m---\\\033[0m           Author: Jianhua Wang
+  \033[1;33m/\\\033[0m      \033[1;31m\\\033[0m          Date:   04-09-2019
+ \033[1;33m/\033[0m\033[1;32m/\\\033[0m\033[1;33m\\\033[0m     \033[1;31m/\\\033[0m
+ \033[1;32m/  \   /\033[0m\033[1;31m/__\\\033[0m
+\033[1;32m`----`-----\033[0m
+==================================================================
+    '''
+    print(logo)
+
+def parseArguments():
+    parser = argparse.ArgumentParser(usage="conver genome build of txt or csv file, require pyliftover",description="python liftover.py -c 0 -p 1 test.txt test_lifted.txt",)
+    parser.add_argument('input', type=str, help='input unlifted file'),
+    parser.add_argument('output', type=str, help='output lifted file'),
+    parser.add_argument('-c','--chr', type=int, help='colunm positon of chromosome (0-based), default=0',default=0,metavar=''),
+    parser.add_argument('-p','--pos', type=int, help='colunm positon of base pair (0-based), default=1',default=1,metavar=''),
+    parser.add_argument('-o','--old', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of input file, choose from [hg17,hg18,hg19,hg38], default=hg19',default='hg19',metavar='')
+    parser.add_argument('-n','--new', type=str, choices=['hg17','hg18','hg19','hg38'], help='Genome Build of output file, choose from [hg17,hg18,hg19,hg38], default=hg38',default='hg38',metavar='')
+    parser.add_argument('-s','--sep', type=str, choices=['table','comma','space'], help='separator of input file, choose from [table,comma,space], default=table',default='table',metavar='')
+    parser.add_argument('-t','--thread', type=int, help='threads you want to run, default=20',default=20,metavar='')
+    parser.add_argument('--withchr', action='store_true', help='exist when chromosome of input starts with chr, and output starts with chr, either')
+    parser.add_argument('--gzip', action='store_true', help='exist when input is .gz file, but output text file, still')
+    parser.add_argument('--headless', action='store_true', help='exist when input is headless file, and output headless file, either')
+
+    args = parser.parse_args()
+    return args
+args = parseArguments()
+
 def extract_overlap_and_cal_ld(pop,chr_id, start, stop):
 	out_prefix = '{}/{}_{}_{}_{}'.format(out_dir,prefix,chr_id,start,stop)
 	raw = pd.read_csv('{}.txt'.format(out_prefix),sep='\t')
@@ -81,6 +113,86 @@ def merge_results(chr_id, start, stop):
 	block.update(merge.drop_duplicates('index'))
 	block = block.astype({'CHR':int,'BP':int})
 	block.to_csv('{}/{}_{}_{}_{}.causal.txt'.format(out_dir,prefix,chr_id,start,stop),sep='\t',index=False,header=False)
+
+def get_credible_set(meta_id):
+    sig_blocks = pd.read_csv(f'./{meta_id}/{meta_id}_significant_blocks.txt',sep='\t')
+    block = pd.read_csv('../ref/blocks.txt',sep='\t')
+    new_sig_blocks = pd.DataFrame(columns=[
+        'chr', 'start', 'stop', 'count', 'missing', 'pa_n',
+        'pa_p_min', 'pa_p_median', 'pa_pp_mean', 'pa_pp_median', 'ca_n',
+        'ca_p_min', 'ca_p_median', 'ca_pp_mean', 'ca_pp_median', 'fi_n',
+        'fi_p_min', 'fi_p_median', 'fi_pp_mean', 'fi_pp_median'
+    ])
+    total_credible = pd.Series()
+
+    for i in sig_blocks.index:
+        chr_id, start, stop = sig_blocks.loc[i]
+
+        names = [
+            'CHR', 'BP', 'rsID', 'MAF', 'EA', 'NEA', 'BETA', 'SE', 'P',
+            'Zscore', 'index', 'PAINTOR', 'CAVIARBF', 'FINEMAP', 'LD'
+        ]
+        df = pd.read_csv(f'./{meta_id}/{meta_id}_{chr_id}_{start}_{stop}.causal.txt',sep='\t',names=names)
+
+        credible_cutoff = 0.95
+        maxpostprob_idx = pd.Series()
+        fm_tool_cred = pd.Series(index=['PAINTOR', 'CAVIARBF', 'FINEMAP'],data=[[], [], []])
+        fm_tool_label = pd.Series(index=['PAINTOR', 'CAVIARBF', 'FINEMAP'],data=[1, 2, 4])
+        credible_set = df[df['FINEMAP'] != -1]
+        for fm_tool in fm_tool_label.index:
+            postprob = 0
+            for idx in credible_set.sort_values(fm_tool,ascending=False).index:
+                if df.loc[idx,'P']>5e-5:
+#                     print(df.loc[idx,'P'])
+                    break
+                postprob += credible_set.loc[idx, fm_tool]
+                fm_tool_cred[fm_tool].append(idx)
+                if idx not in maxpostprob_idx:
+                    maxpostprob_idx.loc[idx] = fm_tool_label[fm_tool]
+                else:
+                    maxpostprob_idx.loc[idx] += fm_tool_label[fm_tool]
+                if postprob >= credible_cutoff:
+                    break
+
+        credible_set = df.loc[maxpostprob_idx.index]
+        del credible_set['index']
+        del credible_set['LD']
+#         credible_set['meta_id'] = meta_id
+#         credible_set['rsID'] = [x[2:] for x in credible_set['rsID']]
+        credible_set['block_id'] = block[block['start'] == start].index[0] + 1
+        credible_set['label'] = maxpostprob_idx
+
+        new_sig_blocks.loc[i] = [
+            chr_id,
+            start,
+            stop,
+            len(df),
+            len(df[df['LD'] == -1]),
+            len(fm_tool_cred['PAINTOR']),
+            credible_set.loc[fm_tool_cred['PAINTOR']]['P'].min(),
+            credible_set.loc[fm_tool_cred['PAINTOR']]['P'].median(),
+            credible_set.loc[fm_tool_cred['PAINTOR']]['PAINTOR'].median(),
+            credible_set.loc[fm_tool_cred['PAINTOR']]['PAINTOR'].mean(),
+            len(fm_tool_cred['CAVIARBF']),
+            credible_set.loc[fm_tool_cred['CAVIARBF']]['P'].min(),
+            credible_set.loc[fm_tool_cred['CAVIARBF']]['P'].median(),
+            credible_set.loc[fm_tool_cred['CAVIARBF']]['CAVIARBF'].median(),
+            credible_set.loc[fm_tool_cred['CAVIARBF']]['CAVIARBF'].mean(),
+            len(fm_tool_cred['FINEMAP']),
+            credible_set.loc[fm_tool_cred['FINEMAP']]['P'].min(),
+            credible_set.loc[fm_tool_cred['FINEMAP']]['P'].median(),
+            credible_set.loc[fm_tool_cred['FINEMAP']]['FINEMAP'].median(),
+            credible_set.loc[fm_tool_cred['FINEMAP']]['FINEMAP'].mean(),
+        ]
+
+        total_credible.loc[i] = credible_set
+
+    total_credible = pd.concat(total_credible.values)
+#     total_credible['rsID'] = pd.to_numeric(total_credible['rsID'],
+#                                            errors='coerce')
+    total_credible.dropna().to_csv(f'./{meta_id}/{meta_id}_total_credible_set.txt',sep='\t',index=False)
+    new_sig_blocks.to_csv(f'./{meta_id}/{meta_id}_new_significant_blocks.txt',sep='\t',index=False)
+#     print(meta_id)
 
 # read blocks file
 paintor = '/f/jianhua/software/PAINTOR_V3.0/PAINTOR'
