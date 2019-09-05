@@ -36,7 +36,7 @@ python 01_prepare_reference.py
 cd ..
 ```
 
-:exclamation: In [PAINTOR's framework](<https://github.com/gkichaev/PAINTOR_V3.0/wiki/2a.-Computing-1000-genomes-LD>​), they go through every VCF file when computing LD which is very time-consuming. So I processed the VCF files in [1000G FTP](<ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502>) by splitting them into blocks and convert them into genotype matrix. Although the preparation will cost hours, it can speed up at 30 times. If you cannot wait for the reference preparation, you can get the ready data from `115...212:/f/jianhua/jianhua_pipeline/Fine-mapping/ref`. Also, if you are skilled with python, you can figure out what else I have done with the original VCF files.
+:exclamation: In [PAINTOR's framework](https://github.com/gkichaev/PAINTOR_V3.0/wiki/2a.-Computing-1000-genomes-LD), they go through every VCF file when computing LD which is very time-consuming. So I processed the VCF files in [1000G FTP](<ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502>) by splitting them into blocks and convert them into genotype matrix. Although the preparation will cost hours, it can speed up at 30 times. If you cannot wait for the reference preparation, you can get the ready data from `115...212:/f/jianhua/jianhua_pipeline/Fine-mapping/ref`. Also, if you are skilled with python, you can figure out what else I have done with the original VCF files.
 
 ## <a name="1"></a>Usage
 
