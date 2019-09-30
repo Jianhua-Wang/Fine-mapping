@@ -34,8 +34,14 @@ def split_reference(pop,chr_id, start, stop):
 
 p = Pool(30)
 for pop in pop_list:
+    if pop in ['EUR','AMR']:
+        block = blocks[blocks['pop']=='EUR']
+    elif pop in ['EAS','SAS']:
+        block = blocks[blocks['pop']=='ASN']
+    else:
+        block = blocks[blocks['pop']=='AFR']
     for i in blocks.index:
-        chr_id, start, stop = blocks.loc[i].values
+        chr_id, start, stop = blocks.loc[i].values[:-1]
         p.apply_async(split_reference,(pop, chr_id, start, stop))
 p.close()
 p.join()
@@ -67,8 +73,14 @@ def generate_genotype_matrix(pop,chr_id, start, stop):
 
 p = Pool(30)
 for pop in pop_list:
+    if pop in ['EUR','AMR']:
+        block = blocks[blocks['pop']=='EUR']
+    elif pop in ['EAS','SAS']:
+        block = blocks[blocks['pop']=='ASN']
+    else:
+        block = blocks[blocks['pop']=='AFR']
     for i in blocks.index:
-        chr_id, start, stop = blocks.loc[i].values
+        chr_id, start, stop = blocks.loc[i].values[:-1]
         p.apply_async(generate_genotype_matrix,(pop,chr_id, start, stop))
 p.close()
 p.join()
