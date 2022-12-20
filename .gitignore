@@ -4,3 +4,7 @@
 /bin/Wenan-caviarbf-7e428645be5e
 /bin/PAINTOR_V3.0-3.0
 .nextflow*
+
+.idea/
+
+__pycache__/
